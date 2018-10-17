@@ -72,8 +72,7 @@ def main():
     plotresult(Samp,Y, 'ellipses.png',M=4,Ngrid=100,plottype='ellipse')
 
     print('{}: success'.format(time.asctime())  )
-    for i in Samp.__getitem__(Samp.N):
-        print(i)
+
 
 if __name__ == "__main__":
     exit(main())
