@@ -13,15 +13,15 @@ data_component_1 = mv_norm.rvs(mean=mean_component_1, cov=cov_component_1, size=
 
 mean_component_2 = [10, 5]
 cov_component_2 = [[2.5 , 0], [0, 4]]  # diagonal covariance
-data_component_2 = mv_norm.rvs(mean=mean_component_2, cov=cov_component_2, size=1000)
+data_component_2 = mv_norm.rvs(mean=mean_component_2, cov=cov_component_2, size=800)
 
 mean_component_3 = [15, 13]
 cov_component_3 = [[0.5 , 0], [0, 2]]  # diagonal covariance
-data_component_3 = mv_norm.rvs(mean=mean_component_3, cov=cov_component_3, size=1000)
+data_component_3 = mv_norm.rvs(mean=mean_component_3, cov=cov_component_3, size=900)
 
 mean_component_4 = [-10, -7]
 cov_component_4 = [[4 , 0], [0, 1]]  # diagonal covariance
-data_component_4 = mv_norm.rvs(mean=mean_component_4, cov=cov_component_4, size=1000)
+data_component_4 = mv_norm.rvs(mean=mean_component_4, cov=cov_component_4, size=650)
 
 
 dataset = np.concatenate([data_component_1, data_component_2, data_component_3, data_component_4], axis=0)
