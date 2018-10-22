@@ -36,13 +36,13 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
     infinite gaussian mixture model with full or diagonal covariance matrix
     using Gibbs sampling
     input:
-        Y : the input dataset
+        Y : the input datasets
         Nsamples : the number of Gibbs samples
         Nint : the samples used for evaluating the tricky integral
         anneal : perform simple siumulated annealing
     output:
         Samp : the output samples
-        Y : the input dataset
+        Y : the input datasets
     """
     # compute some data derived quantities
     N, D = Y.shape
@@ -263,6 +263,8 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
         newS = copy.deepcopy(S)
         Samp.addsample(newS)
         z += 1
+        print(k)
+        print(n)
 
     return Samp, Y
 
