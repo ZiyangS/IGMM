@@ -1,5 +1,3 @@
-
-
 import numpy as np
 import random
 from matplotlib import pyplot as plt
@@ -58,10 +56,8 @@ class ARS():
         # Derivative at first point in xi should potentially be > 0
         # Derivative at last point in xi should potentially be < 0
         if not(self.hprime[0] > 0):
-            print(self.hprime)
             warnings.warn("first point: initial anchor points must span mode of PDF")
         if not(self.hprime[-1] < 0):
-            print(self.hprime)
             ## use this raise at risk,
             ## note that in Beta(1.5, 1), this condition does not need to meet
             warnings.warn("last point: initial anchor points must span mode of PDF")
@@ -123,12 +119,9 @@ class ARS():
             self.hprime = np.hstack([self.hprime, hprimenew])[idx]
 
         self.z = np.zeros(self.x.__len__()+1)
-
         # This is the formula explicitly stated in Gilks.
         # Requires 7(N-1) computations
         # Following line requires 6(N-1)
-        # self.z[1:-1] = (np.diff(self.h) + self.x[:-1]*self.hprime[:-1] - self.x[1:]*self.hprime[1:]) / -np.diff(self.hprime);
-
         self.z[1:-1] = (np.diff(self.h) - np.diff(self.x*self.hprime))/-np.diff(self.hprime)
 
         self.z[0] = self.lb; self.z[-1] = self.ub
@@ -147,7 +140,7 @@ class ARS():
         '''
         u = random.random()
         # Find the largest z such that sc(z) < u
-        i = np.nonzero(self.s/self.cu < u)[0][-1]
+        i = np.nonzero(self.s / self.cu < u)[0][-1]
 
         # Figure out x from inverse cdf in relevant sector
         xt = self.x[i] + (-self.h[i] + np.log(self.hprime[i]*(self.cu*u - self.s[i]) + 

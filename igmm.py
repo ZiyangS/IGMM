@@ -1,16 +1,8 @@
-import sys
 import time
 import copy
 import numpy as np
-from scipy.stats import gamma, wishart
-from scipy.stats import multivariate_normal as mv_norm
 from numpy.linalg import inv, det, slogdet
-from scipy import special
-from ars import ARS
-
-
-# the maximum positive integer for use in setting the ARS seed
-maxsize = sys.maxsize
+from utils import *
 
 
 class Sample:
@@ -72,22 +64,37 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
     # set first pi to 1, because only one component initially
     pi[0] = 1.0
 
+    beta = None
     # draw beta from prior
-    # y = (beta - D + 1)^(-1) , y is subject to gamma dist (Rasmussen 2000), eq 11 (Rasmussen 2006)
-    # gamma dist (Rasmussen 2000) use scale and mean, is different. alpha need to change to 1/2*alpha
-    # theta parameter change to mean, theta*(1/alpha). So theta of Rasmussen's should be 2*theta/a
-    # For multivariate part, mean of Gamma is 1/D but 1. So we need "/float(D)"
-    temp_para_y = draw_gamma(0.5, 2.0/float(D))
-    beta = np.squeeze(float(D) - 1.0 + 1.0/temp_para_y)
+    if cov_type == "full":
+        # y = (beta - D + 1)^(-1) , y is subject to gamma dist (Rasmussen 2000), eq 11 (Rasmussen 2006)
+        # gamma dist (Rasmussen 2000) use scale and mean, is different. alpha need to change to 1/2*alpha
+        # theta parameter change to mean, theta*(1/alpha). So theta of Rasmussen's should be 2*theta/a
+        # For multivariate part, mean of Gamma is 1/D but 1. So we need "/float(D)"
+        temp_para_y = draw_gamma(0.5, 2.0/float(D))
+        beta = np.squeeze(float(D) - 1.0 + 1.0/temp_para_y)
+    else:
+        # beta is subject to Rasmussen's gamma(1,1), standard gamma(0.5, 2 )
+        beta = np.array([np.squeeze(draw_gamma(0.5, 2)) for d in range(D)])
 
+    w = None
     # draw w from prior
-    # w is subject to Wishart(D, covariance matrix/D), eq 11 (Rasmussen 2006)
-    # the df(degrees of freedom) is dimensions number D, scale matrix is covariance matrix/D
-    w = draw_wishart(D, covy/float(D))
+    if cov_type == "full":
+        # w is subject to Wishart(D, covariance matrix/D), eq 11 (Rasmussen 2006)
+        # the df(degrees of freedom) is dimensions number D, scale matrix is covariance matrix/D
+        w = draw_wishart(D, covy/float(D))
+    else:
+        # w is subject ot Rasmussen's gamma(1, variance) , eq 7 (Rasmussen 2000)
+        # which means its subject to standard gamma(0.5, 2*variance)
+        w = np.array([np.squeeze(draw_gamma(0.5, 2*covy[d, d])) for d in range(D)])
 
     # draw s from prior
-    # Sj is subject to Wishart(beta, (beta*w)-1), eq 8 (Rasmussen 2006)
-    s[0,:] = np.squeeze(np.reshape(draw_wishart(float(beta), inv(beta*w)), (D*D, -1)))
+    if cov_type == "full":
+        # Sj is subject to Wishart(beta, (beta*w)-1), eq 8 (Rasmussen 2006)
+        s[0, : ] = np.squeeze(np.reshape(draw_wishart(float(beta), inv(beta*w)), (D*D, -1)))
+    else:
+        s[0, : ] = np.squeeze(np.reshape(np.diag([np.squeeze(draw_gamma(beta[d]/2 , 2/(beta[d]*w[d]))) \
+                                                  for d in range(D)]), (D*D, -1)))
     n[0] = N                   # initially, all samples are in the only component
 
     # draw lambda from prior
@@ -149,17 +156,33 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
         alpha = draw_alpha(k, N)
 
         # draw sj from posterior (depends on mu, c, beta, w), eq 8 (Rasmussen 2000)
-        for j,nj in enumerate(n):
-            temp_para_sum = np.zeros((D, D))
-            idx = np.argwhere(c == j)
-            yj = np.reshape(Y[idx, : ], (idx.shape[0], D))
-            for yi in yj:
-                temp_para_sum += np.outer((mu[j, : ] - yi), np.transpose(mu[j, : ] - yi))
-            temp_s = draw_wishart(beta + nj, inv(beta*w + temp_para_sum))
-            s[j, :] = np.reshape(temp_s, (1, D * D))
+        for j, nj in enumerate(n):
+            if cov_type == "full":
+                temp_para_sum = np.zeros((D, D))
+                idx = np.argwhere(c == j)
+                yj = np.reshape(Y[idx, :], (idx.shape[0], D))
+                for yi in yj:
+                    temp_para_sum += np.outer((mu[j, :] - yi), np.transpose(mu[j, :] - yi))
+                temp_s = draw_wishart(beta + nj, inv(beta*w + temp_para_sum))
+                s[j, : ] = np.reshape(temp_s, (1, D*D))
+            else:
+                temp_s = np.zeros((D, D))
+                idx = np.argwhere(c == j)
+                yj = np.reshape(Y[idx, :], (idx.shape[0], D))
+                for d in range(D):
+                    temp_para_sum = np.zeros(1)
+                    for yi in yj:
+                        temp_para_sum += np.square(yi[d] - mu[j, d])
+                    s_jd = draw_gamma((beta[d] + nj)/2, 2/(beta[d]*w[d] + temp_para_sum))
+                    temp_s[d, d] = s_jd
+                s[j, : ] = np.reshape(temp_s, (1, D*D))
 
         # compute the unrepresented probability - apply simulated annealing, eq 17 (Rasmussen 2000)
-        p_unrep = (alpha/(N - 1.0 + alpha)) * integral_approx(Y, lam, r, beta, w, G, size=Nint)
+        p_unrep = 1
+        if cov_type == "full":
+            p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx_full_cov(Y, lam, r, beta, w, G, size=Nint)
+        else:
+            p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx_diagonal_cov(Y, lam, r, beta, w, G, size=Nint)
         p_indicators_prior = np.outer(np.ones(k + 1), p_unrep)
 
         # for the represented components, eq 17 (Rasmussen 2000)
@@ -178,20 +201,34 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
         c = np.hstack(draw_indicator(p_indicators_prior))
 
         # draw w from posterior (depends on k, beta, D, sj), eq 9 (Rasmussen 2000)
-        w = draw_wishart(k*beta + D, inv(D*inv_covy + beta*np.reshape(np.sum(s, 0), (D, D))))
+        if cov_type == "full":
+            w = draw_wishart(k*beta + D, inv(D*inv_covy + beta*np.reshape(np.sum(s, axis=0), (D, D))))
+        else:
+            w = np.array([np.squeeze(draw_gamma(0.5*(k*beta[d] + 1), \
+                                               2/(1/covy[d,d] + beta[d]*np.reshape(np.sum(s, axis=0),(D,D))[d,d]))) \
+                                     for d in range(D)])
 
         # draw beta from posterior (depends on k, s, w), eq 9 (Rasmussen 2000)
         # Because its not standard form, using ARS to sampling.
-        beta = draw_beta(k, s, w)[0]
+        if cov_type == "full":
+            beta = draw_beta_full_cov(k, s, w)[0]
+        else:
+            beta = np.array([draw_beta_diagonal_cov(k, s, w, d, D)[0] for d in range(D)])
 
         # sort out based on new stochastic indicators
         nij = np.sum(c == k)        # see if the *new* component has occupancy
         if nij > 0:
             # draw from priors and increment k
             newmu = draw_MVNormal(mean=lam, cov=inv(r))
-            news = draw_wishart(float(beta), inv(beta*w))
+            news = None
+            if cov_type == "full":
+                news = draw_wishart(float(beta), inv(beta*w))
+            else:
+                news = np.squeeze(np.reshape(np.diag([np.squeeze(draw_gamma(beta[d] / 2, 2 / (beta[d] * w[d]))) \
+                                                             for d in range(D)]), (D*D, -1)))
             mu = np.concatenate((mu, np.reshape(newmu, (1, D))))
             s = np.concatenate((s, np.reshape(news,(1, D*D))))
+
             k = k + 1
         # find the associated number for every components
         n = np.array([np.sum(c == j) for j in range(k)])
@@ -229,142 +266,3 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
 
     return Samp, Y
 
-
-def integral_approx(y, lam, r, beta, w, G=1, size=100):
-    """
-    estimates the integral, eq 17 (Rasmussen 2000)
-    """
-    temp = np.zeros(len(y))
-    inv_betaw = inv(beta * w)
-
-    inv_r = inv(r)
-    i = 0
-    bad = 0
-    while i < size:
-        mu = mv_norm.rvs(mean=lam, cov=inv_r, size=1)
-        s = draw_wishart(float(beta), inv_betaw)
-        try:
-            temp += mv_norm.pdf(y, mean=np.squeeze(mu), cov=G*inv(s))
-        except:
-            bad += 1
-            pass
-        i += 1
-    return temp/float(size)
-
-
-def log_p_alpha(alpha, k=1, N=1):
-    """
-    the log of eq15 (Rasmussen 2000)
-    """
-    return (k - 1.5)*np.log(alpha) - 0.5/alpha + special.gammaln(alpha) - special.gammaln(N + alpha)
-
-
-def log_p_alpha_prime(alpha, k=1, N=1):
-    """
-    the derivative (wrt alpha) of the log of eq 15 (Rasmussen 2000)
-    """
-    return (k - 1.5)/alpha + 0.5/(alpha*alpha) + special.psi(alpha) - special.psi(alpha + N)
-
-
-def log_p_beta(beta,k=1,s=1,w=1,D=1,logdet_w=1,cumculative_sum_equation=1):
-    """
-    The log of the second part of eq 9 (Rasmussen 2000)
-    """
-    return -1.5*np.log(beta - D + 1.0) \
-        - 0.5*D/(beta - D + 1.0) \
-        + 0.5*beta*k*D*np.log(0.5*beta) \
-        + 0.5*beta*k*logdet_w \
-        + 0.5*beta*cumculative_sum_equation \
-        - k * special.multigammaln(0.5*beta, D)
-
-def log_p_beta_prime(beta,k=1,s=1,w=1,D=1,logdet_w=1,cumculative_sum_equation=1):
-    """
-    The derivative (wrt beta) of the log of eq 9 (Rasmussen 2000)
-    """
-    psi = 0.0
-    for j in range(1,D+1):
-        psi += special.psi(0.5*beta + 0.5*(1.0 - j))
-    return -1.5/(beta - D + 1.0) \
-        + 0.5*D/(beta - D + 1.0)**2 \
-        + 0.5*k*D*(1.0 + np.log(0.5*beta)) \
-        + 0.5*k*logdet_w \
-        + 0.5*cumculative_sum_equation \
-    - 0.5*k*psi
-
-# def draw_gamma_ras(a, theta, size=1):
-#     """
-#     returns Gamma distributed samples according to the Rasmussen (2000) definition
-#     """
-#     return gamma.rvs(0.5 * a, loc=0, scale=2.0 * theta / a, size=size)
-
-
-def draw_gamma(a, theta, size=1):
-    """
-    returns Gamma distributed samples
-    """
-    return gamma.rvs(a, loc=0, scale=theta, size=size)
-
-
-def draw_wishart(df, scale, size=1):
-    """
-    returns Wishart distributed samples
-    """
-    return wishart.rvs(df=df, scale=scale, size=size)
-
-
-def draw_MVNormal(mean=0, cov=1, size=1):
-    """
-    returns multivariate normally distributed samples
-    """
-    return mv_norm.rvs(mean=mean, cov=cov, size=size)
-
-
-def draw_alpha(k, N, size=1):
-    """
-    draw alpha from posterior (depends on k, N), eq 15 (Rasmussen 2000), using ARS
-    Make it robust with an expanding range in case of failure
-    """
-    ars = ARS(log_p_alpha, log_p_alpha_prime, xi=[0.1, 5], lb=0, ub=np.inf, k=k, N=N)
-    return ars.draw(size)
-
-
-def draw_beta(k, s, w, size=1):
-    """
-    draw beta from posterior (depends on k, s, w), eq 9 (Rasmussen 2000), using ARS
-    Make it robust with an expanding range in case of failure
-    """
-    D = w.shape[0]
-
-    # compute Determinant of w, det(w)
-    logdet_w = slogdet(w)[1]
-    # compute cumulative sum j from i to k, [ log(det(sj))- trace(w * sj)]
-    cumculative_sum_equation = 0
-    for sj in s:
-        sj = np.reshape(sj, (D, D))
-        cumculative_sum_equation += slogdet(sj)[1]
-        cumculative_sum_equation -= np.trace(np.dot(w, sj))
-
-    lb = D
-    ars = ARS(log_p_beta, log_p_beta_prime, xi=[lb + 0.1, lb + 1000], lb=lb, ub=float("inf"), \
-              k=k, s=s, w=w, D=D, logdet_w=logdet_w, cumculative_sum_equation=cumculative_sum_equation)
-
-
-    return ars.draw(size)
-
-
-def draw_indicator(pvec):
-    """
-    draw stochastic indicator values from multinominal distributions, check wiki
-    """
-    res = np.zeros(pvec.shape[1])
-    # loop over each data point
-    for j in range(pvec.shape[1]):
-        c = np.cumsum(pvec[ : ,j])        # the cumulative un-scaled probabilities
-        R = np.random.uniform(0, c[-1], 1)        # a random number
-        r = (c - R)>0                     # truth table (less or greater than R)
-        y = (i for i, v in enumerate(r) if v)    # find first instant of truth
-        try:
-            res[j] = y.__next__()           # record component index
-        except:                 # if no solution (must have been all zeros)
-            res[j] = np.random.randint(0, pvec.shape[0]) # pick uniformly
-    return res
