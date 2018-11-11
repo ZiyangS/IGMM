@@ -74,8 +74,8 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
         temp_para_y = draw_gamma(0.5, 2.0/float(D))
         beta = np.squeeze(float(D) - 1.0 + 1.0/temp_para_y)
     else:
-        # beta is subject to Rasmussen's gamma(1,1), standard gamma(0.5, 2 )
-        beta = np.array([np.squeeze(draw_gamma(0.5, 2)) for d in range(D)])
+        # (beta)^(-1) is subject to Rasmussen's gamma(1,1), standard gamma(0.5, 2)
+        beta = np.array([np.squeeze(1/draw_gamma(0.5, 2)) for d in range(D)])
 
     w = None
     # draw w from prior
