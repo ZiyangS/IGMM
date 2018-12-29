@@ -77,6 +77,7 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
         # beta is subject to Rasmussen's gamma(1,1), standard gamma(0.5, 2 )
         beta = np.array([np.squeeze(draw_invgamma(0.5, 2)) for d in range(D)])
 
+
     w = None
     # draw w from prior
     if cov_type == "full":
