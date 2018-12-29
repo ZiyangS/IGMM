@@ -75,7 +75,7 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
         beta = np.squeeze(float(D) - 1.0 + 1.0/temp_para_y)
     else:
         # beta is subject to Rasmussen's gamma(1,1), standard gamma(0.5, 2 )
-        beta = np.array([np.squeeze(draw_gamma(0.5, 2)) for d in range(D)])
+        beta = np.array([np.squeeze(draw_invgamma(0.5, 2)) for d in range(D)])
 
     w = None
     # draw w from prior
@@ -95,7 +95,9 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
     else:
         s[0, : ] = np.squeeze(np.reshape(np.diag([np.squeeze(draw_gamma(beta[d]/2 , 2/(beta[d]*w[d]))) \
                                                   for d in range(D)]), (D*D, -1)))
-    n[0] = N                   # initially, all samples are in the only component
+
+    # initially, all samples are in the only component
+    n[0] = N
 
     # draw lambda from prior
     # lambda is subject to Multivariate Guassian(muy, covy), eq 13 (Rasmussen 2006)
@@ -177,6 +179,7 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
                     temp_s[d, d] = s_jd
                 s[j, : ] = np.reshape(temp_s, (1, D*D))
 
+
         # compute the unrepresented probability - apply simulated annealing, eq 17 (Rasmussen 2000)
         p_unrep = 1
         if cov_type == "full":
@@ -184,6 +187,7 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
         else:
             p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx_diagonal_cov(Y, lam, r, beta, w, G, size=Nint)
         p_indicators_prior = np.outer(np.ones(k + 1), p_unrep)
+
 
         # for the represented components, eq 17 (Rasmussen 2000)
         for j in range(k):
@@ -196,7 +200,6 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
                           for i in idx])
             p_indicators_prior[j, idx] = nij[idx]/(N - 1.0 + alpha)*np.reshape(np.exp(-0.5 * Q), idx.shape) \
                                          *np.sqrt(det(temp_sj))
-
         # stochastic indicator (we could have a new component)
         c = np.hstack(draw_indicator(p_indicators_prior))
 
@@ -214,7 +217,6 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
             beta = draw_beta_full_cov(k, s, w)[0]
         else:
             beta = np.array([draw_beta_diagonal_cov(k, s, w, d, D)[0] for d in range(D)])
-
         # sort out based on new stochastic indicators
         nij = np.sum(c == k)        # see if the *new* component has occupancy
         if nij > 0:

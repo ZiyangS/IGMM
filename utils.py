@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from scipy.stats import gamma, wishart
+from scipy.stats import gamma, wishart, norm, invgamma
 from scipy.stats import multivariate_normal as mv_norm
 from numpy.linalg import inv, det, slogdet
 from scipy import special
@@ -32,6 +32,7 @@ def integral_approx_full_cov(y, lam, r, beta, w, G=1, size=100):
         i += 1
     return temp/float(size)
 
+
 def integral_approx_diagonal_cov(y, lam, r, beta, w, G=1, size=100):
     """
     estimates the integral, eq 17 (Rasmussen 2000)
@@ -47,7 +48,8 @@ def integral_approx_diagonal_cov(y, lam, r, beta, w, G=1, size=100):
         mu = mv_norm.rvs(mean=lam, cov=inv_r, size=1)
         s = np.diag([np.squeeze(draw_gamma(beta[d]/2 , 2/(beta[d]*w[d]))) for d in range(D)])
         try:
-            temp += mv_norm.pdf(y, mean=np.squeeze(mu), cov=G*inv(s))
+            temp_para = mv_norm.pdf(y, mean=np.squeeze(mu), cov=G*inv(s))
+            temp += temp_para
         except:
             bad += 1
             pass
@@ -55,14 +57,14 @@ def integral_approx_diagonal_cov(y, lam, r, beta, w, G=1, size=100):
     return temp/float(size)
 
 
-def log_p_alpha(alpha, k=1, N=1):
+def log_p_alpha(alpha, k, N):
     """
     the log of eq15 (Rasmussen 2000)
     """
     return (k - 1.5)*np.log(alpha) - 0.5/alpha + special.gammaln(alpha) - special.gammaln(N + alpha)
 
 
-def log_p_alpha_prime(alpha, k=1, N=1):
+def log_p_alpha_prime(alpha, k, N):
     """
     the derivative (wrt alpha) of the log of eq 15 (Rasmussen 2000)
     """
@@ -81,6 +83,7 @@ def log_p_beta_full_cov(beta,k=1,s=1,w=1,D=1,logdet_w=1,cumculative_sum_equation
         + 0.5*beta*cumculative_sum_equation \
         - k*special.multigammaln(0.5*beta, D)
 
+
 def log_p_beta_prime_full_cov(beta,k=1,s=1,w=1,D=1,logdet_w=1,cumculative_sum_equation=1):
     """
     The derivative (wrt beta) of the log of eq 9 (Rasmussen 2000)
@@ -95,6 +98,7 @@ def log_p_beta_prime_full_cov(beta,k=1,s=1,w=1,D=1,logdet_w=1,cumculative_sum_eq
         + 0.5*k*logdet_w \
         + 0.5*cumculative_sum_equation \
         - 0.5*k*psi
+
 
 def log_p_beta_diagonal_cov(beta,k=1,w=1,D=1,cumculative_sum_equation=1):
     """
@@ -118,6 +122,7 @@ def log_p_beta_prime_diagonal_cov(beta,k=1,w=1,D=1,cumculative_sum_equation=1):
         + (k*beta -3)/beta \
         + 0.5*cumculative_sum_equation
 
+
 # def draw_gamma_ras(a, theta, size=1):
 #     """
 #     returns Gamma distributed samples according to the Rasmussen (2000) definition
@@ -130,6 +135,13 @@ def draw_gamma(a, theta, size=1):
     returns Gamma distributed samples
     """
     return gamma.rvs(a, loc=0, scale=theta, size=size)
+
+
+def draw_invgamma(a, theta, size=1):
+    """
+    returns inverse Gamma distributed samples
+    """
+    return invgamma.rvs(a, loc=0, scale=theta, size=size)
 
 
 def draw_wishart(df, scale, size=1):
