@@ -189,7 +189,6 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
             p_unrep = (alpha / (N - 1.0 + alpha)) * integral_approx_diagonal_cov(Y, lam, r, beta, w, G, size=Nint)
         p_indicators_prior = np.outer(np.ones(k + 1), p_unrep)
 
-
         # for the represented components, eq 17 (Rasmussen 2000)
         for j in range(k):
             # n-i,j : the number of oberservations, excluding yi, that are associated with component j
@@ -218,6 +217,7 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
             beta = draw_beta_full_cov(k, s, w)[0]
         else:
             beta = np.array([draw_beta_diagonal_cov(k, s, w, d, D)[0] for d in range(D)])
+
         # sort out based on new stochastic indicators
         nij = np.sum(c == k)        # see if the *new* component has occupancy
         if nij > 0:

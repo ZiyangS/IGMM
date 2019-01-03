@@ -184,7 +184,7 @@ def draw_beta_full_cov(k, s, w, size=1):
         cumculative_sum_equation += slogdet(sj)[1]
         cumculative_sum_equation -= np.trace(np.dot(w, sj))
     lb = D
-    ars = ARS(log_p_beta_full_cov, log_p_beta_prime_full_cov, xi=[lb + 1000, lb + 1000], lb=lb, ub=float("inf"), \
+    ars = ARS(log_p_beta_full_cov, log_p_beta_prime_full_cov, xi=[lb + 1, lb + 1000], lb=lb, ub=float("inf"), \
               k=k, s=s, w=w, D=D, logdet_w=logdet_w, cumculative_sum_equation=cumculative_sum_equation)
     return ars.draw(size)
 
