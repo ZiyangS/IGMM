@@ -180,6 +180,19 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
                     temp_s[d, d] = s_jd
                 s[j, : ] = np.reshape(temp_s, (1, D*D))
 
+        # draw w from posterior (depends on k, beta, D, sj), eq 9 (Rasmussen 2000)
+        if cov_type == "full":
+            w = draw_wishart(k * beta + D, inv(D * inv_covy + beta * np.reshape(np.sum(s, axis=0), (D, D))))
+        else:
+            w = np.array([np.squeeze(draw_gamma(0.5 * (k * beta[d] + 1), 2 / (1 / covy[d, d] + beta[d] *
+                                np.reshape(np.sum(s, axis=0), (D, D))[d, d]))) for d in range(D)])
+
+        # draw beta from posterior (depends on k, s, w), eq 9 (Rasmussen 2000)
+        # Because its not standard form, using ARS to sampling.
+        if cov_type == "full":
+            beta = draw_beta_full_cov(k, s, w)[0]
+        else:
+            beta = np.array([draw_beta_diagonal_cov(k, s, w, d, D)[0] for d in range(D)])
 
         # compute the unrepresented probability - apply simulated annealing, eq 17 (Rasmussen 2000)
         p_unrep = 1
@@ -202,21 +215,6 @@ def igmm_full_cov_sampler(Y, cov_type="full", Nsamples=2000, Nint=100, anneal=Fa
                                          *np.sqrt(det(temp_sj))
         # stochastic indicator (we could have a new component)
         c = np.hstack(draw_indicator(p_indicators_prior))
-
-        # draw w from posterior (depends on k, beta, D, sj), eq 9 (Rasmussen 2000)
-        if cov_type == "full":
-            w = draw_wishart(k*beta + D, inv(D*inv_covy + beta*np.reshape(np.sum(s, axis=0), (D, D))))
-        else:
-            w = np.array([np.squeeze(draw_gamma(0.5*(k*beta[d] + 1), \
-                                               2/(1/covy[d,d] + beta[d]*np.reshape(np.sum(s, axis=0),(D,D))[d,d]))) \
-                                     for d in range(D)])
-
-        # draw beta from posterior (depends on k, s, w), eq 9 (Rasmussen 2000)
-        # Because its not standard form, using ARS to sampling.
-        if cov_type == "full":
-            beta = draw_beta_full_cov(k, s, w)[0]
-        else:
-            beta = np.array([draw_beta_diagonal_cov(k, s, w, d, D)[0] for d in range(D)])
 
         # sort out based on new stochastic indicators
         nij = np.sum(c == k)        # see if the *new* component has occupancy
